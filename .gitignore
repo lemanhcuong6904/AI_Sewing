@@ -1,0 +1,56 @@
+# --- Python ---
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.ipynb
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Config / settings cục bộ ---
+*.json
+
+# --- Dữ liệu thu thập / dataset ---
+/captured_frames/
+/adjustor_data/
+/mask_priors/
+/test/
+/test_frames/*/
+/collected_frames/
+/dataset/
+/datasets/
+test _cases_for_labeling*.txt
+
+# --- Model weights / engine (file nặng, sinh lại được) ---
+*.onnx
+*.onnx.data
+*.pth
+*.pt
+*.engine
+*.trt
+*.plan
+
+# --- Log / output tạm ---
+*.log
+trt_output.txt
+*.tmp
+*.bak
+
+# --- Repo bên thứ ba clone vào ---
+/mlsd_pytorch/
+/TP-LSD/
+
+/origins/
+

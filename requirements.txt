@@ -1,0 +1,10 @@
+# sewing-env
+numpy
+# opencv-python==4.13.0
+opencv-contrib-python==4.5.5.64
+pyserial
+matplotlib
+llvmlite==0.31.0
+numba==0.47.0
+onnxruntime-gpu
+pycuda
