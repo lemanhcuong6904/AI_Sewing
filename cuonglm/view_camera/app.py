@@ -330,7 +330,7 @@ class Window(QWidget):
         self.b_color = QPushButton("Pick fabric colour (click)")
         self.b_color.setCheckable(True)
         self.b_color.toggled.connect(self.set_pick)
-        self.b_auto = btn("Auto colour (bright side)", self.clear_color)
+        self.b_auto = btn("Auto (independent of lighting)", self.clear_color)
         self.swatch = QLabel()
         self.swatch.setFixedSize(46, 30)
         self.color_text = QLabel()
@@ -349,7 +349,7 @@ class Window(QWidget):
         self.cb_match = QCheckBox("Show colour mask (magenta)")
         self.cb_match.toggled.connect(self.on_show_match)
         self.cb_static = QCheckBox("Ignore the fixed layer of the bed")
-        self.cb_static.setChecked(True)
+        self.cb_static.setChecked(False)     # only for a bed with a fixed layer of the fabric's colour
         self.cb_static.toggled.connect(self.reextract)
         self.b_static = btn("Learn fixed layer from folder...", self.learn_static)
         self.static_text = QLabel()
@@ -534,11 +534,12 @@ class Window(QWidget):
         self.contour, self.mask = c, m
         self.canvas.set_fabric(self.bgr, c, m)
         if c is None:
-            self.status.setText("No fabric region found. Pick the fabric colour or raise the tolerance.")
+            self.status.setText("No fabric in view" + (" (no clear warm region)." if self.fabric_bgr is None
+                                                          else ". Pick the colour again or raise the tolerance."))
             self.plan = None
             self.show_result()
             return
-        how = "picked colour" if self.fabric_bgr is not None else "auto: bright side"
+        how = "picked colour" if self.fabric_bgr is not None else "auto"
         msg = f"Fabric contour: {len(c)} points ({how}), {float(np.mean(m > 0)):.0%} of the image."
         cover = float(np.mean(raw > 0))
         if cover > 0.6:
@@ -560,9 +561,6 @@ class Window(QWidget):
             self.static_text.setText(f"Learnt: {self.static.mean():.0%} of the frame.")
 
     def learn_static(self):
-        if self.fabric_bgr is None:
-            self.status.setText("Pick the fabric colour first: the fixed layer is learnt for that colour.")
-            return
         folder = QFileDialog.getExistingDirectory(self, "Folder of frames (fabric in different places)")
         if not folder:
             return
@@ -576,6 +574,7 @@ class Window(QWidget):
             return
         self.static = build_static_mask(frames, self.fabric_bgr)
         save_static(self.static)
+        self.cb_static.setChecked(True)
         self.update_static_text()
         self.status.setText(f"Fixed layer learnt from {len(frames)} frames and saved.")
         self.reextract()
@@ -604,8 +603,8 @@ class Window(QWidget):
     def update_swatch(self):
         if self.fabric_bgr is None:
             self.swatch.setStyleSheet("background:#d8d8d4; border:1px dashed #888;")
-            self.color_text.setText("Auto: the brighter side of the image is the fabric. "
-                                    "Click the button, then click on the fabric to set it.")
+            self.color_text.setText("Auto: the fabric is the warmer class of the frame, so it does not "
+                                    "depend on the lamp. To force a colour, click the button above, then the fabric.")
             return
         b, g, r = (int(round(v)) for v in self.fabric_bgr)
         L, a, bb = bgr_to_lab(self.fabric_bgr)
@@ -616,8 +615,6 @@ class Window(QWidget):
         try:
             with open(SETTINGS, encoding="utf-8") as f:
                 s = json.load(f)
-            if s.get("fabric_bgr"):
-                self.fabric_bgr = np.array(s["fabric_bgr"], np.float32)
             self.tol_default = int(s.get("tol", self.tol_default))
         except (OSError, ValueError, TypeError):
             pass
@@ -656,7 +653,7 @@ class Window(QWidget):
         static = self.current_static(w, h)
         corner, why = find_bottom_left_corner(self.contour, (w, h), m.u1, m.u2,
                                               ("auto", "horizontal", "vertical")[self.ra.currentIndex()],
-                                              min_cut_edge_frac=0.04,
+                                              min_cut_edge_frac=0.04, long_h_min_theta=35.0,
                                               occluder=None if static is None else occluder_from_static(static))
         if corner is None:
             self.plan = None

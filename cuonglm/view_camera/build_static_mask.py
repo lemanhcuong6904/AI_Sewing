@@ -5,7 +5,8 @@ being moved.  The result is saved as static_mask.png next to this file and used 
 view_camera.py.
 
 Run:  python cuonglm/view_camera/build_static_mask.py <folder of frames>
-The fabric colour comes from settings.json (pick it once in app.py).
+The fabric is found automatically (warmer than the felt); only if a colour was picked in app.py
+(settings.json) is that colour used instead.
 """
 import glob
 import json
@@ -23,10 +24,11 @@ def main():
     if len(sys.argv) < 2 or not os.path.isdir(sys.argv[1]):
         sys.exit(__doc__)
     settings = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
-    with open(settings, encoding="utf-8") as f:
-        fab = json.load(f).get("fabric_bgr")
-    if not fab:
-        sys.exit("No fabric colour in settings.json: pick it in app.py first.")
+    try:
+        with open(settings, encoding="utf-8") as f:
+            fab = json.load(f).get("fabric_bgr")
+    except (OSError, ValueError):
+        fab = None
     files = []
     for ext in ("png", "jpg", "jpeg", "bmp"):
         files += glob.glob(os.path.join(sys.argv[1], f"*.{ext}"))
@@ -34,7 +36,7 @@ def main():
     frames = [f for f in frames if f is not None]
     if len(frames) < 5:
         sys.exit(f"Only {len(frames)} frame(s): need at least 5 with the fabric in different places.")
-    static = build_static_mask(frames, np.array(fab, np.float32))
+    static = build_static_mask(frames, None if not fab else np.array(fab, np.float32))
     save_static(static)
     print(f"{len(frames)} frames -> {STATIC_PATH} ({int(static.sum())} px = {static.mean():.1%} of the image)")
 

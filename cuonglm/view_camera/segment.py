@@ -19,7 +19,42 @@ def _ellipse(px):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (px, px))
 
 
-def build_static_mask(frames, fabric_bgr, tol=14, frac=0.8, open_px=5):
+def _otsu_1d(vals, lo=-40.0, hi=60.0, bins=200):
+    """Otsu threshold of a 1-D sample: (threshold, mean below, mean above, fraction above)."""
+    hist, edges = np.histogram(vals, bins=bins, range=(lo, hi))
+    hist = hist.astype(np.float64)
+    c = (edges[:-1] + edges[1:]) / 2
+    w0 = np.cumsum(hist)
+    w1 = w0[-1] - w0
+    s0 = np.cumsum(hist * c)
+    m0 = s0 / np.maximum(w0, 1)
+    m1 = (s0[-1] - s0) / np.maximum(w1, 1)
+    k = int(np.argmax(w0 * w1 * (m0 - m1) ** 2))
+    return float(c[k]), float(m0[k]), float(m1[k]), float(w1[k] / max(w0[-1], 1))
+
+
+def auto_fabric_mask(bgr, min_sep=7.0, max_frac=0.8):
+    """uint8 0/1 mask of the fabric without a given colour: robust to the lamp being on or off.
+
+    The fabric (brown card) is *warmer* than the dark felt around it: its Lab b* is higher.  A change of
+    illumination (brightness, white balance) moves the fabric and the felt the same way, so the
+    difference stays and the threshold is set per frame (Otsu on b*).  The white and the red parts of
+    the machine (very bright / very red) and black are left out of the statistics.  When the two classes
+    are not clearly apart, or one of them takes (almost) everything, there is no fabric in view and the
+    mask is empty.
+    """
+    lab = bgr_to_lab_image(bgr, 2.0)
+    L, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
+    valid = (L < 80) & (L > 8) & (a < 25)
+    if int(valid.sum()) < 0.05 * valid.size:
+        return np.zeros(valid.shape, np.uint8)
+    thr, m_lo, m_hi, frac = _otsu_1d(b[valid])
+    if m_hi - m_lo < min_sep or frac > max_frac:
+        return np.zeros(valid.shape, np.uint8)
+    return (valid & (b > thr)).astype(np.uint8)
+
+
+def build_static_mask(frames, fabric_bgr=None, tol=14, frac=0.8, open_px=5):
     """uint8 0/1 mask of the fabric-coloured layer that is present in (almost) every frame.
 
     The camera is fixed, so a beige layer that stays in the same place in >= `frac` of the frames is
@@ -28,9 +63,9 @@ def build_static_mask(frames, fabric_bgr, tol=14, frac=0.8, open_px=5):
     must be found out to the edge of the frame, where the colour drifts a little.
     """
     acc, n = None, 0
-    ref = bgr_to_lab(fabric_bgr)
+    ref = None if fabric_bgr is None else bgr_to_lab(fabric_bgr)
     for f in frames:
-        m = color_match_mask(bgr_to_lab_image(f), ref, tol).astype(np.float32)
+        m = (auto_fabric_mask(f) if ref is None else color_match_mask(bgr_to_lab_image(f), ref, tol)).astype(np.float32)
         acc = m if acc is None else acc + m
         n += 1
     static = (acc / max(n, 1) >= frac).astype(np.uint8)
@@ -68,15 +103,14 @@ def occluder_from_static(static, grow=16):
 def segment_fabric(bgr, fabric_bgr=None, tol=25, open_px=7, close_px=15, min_frac=0.01, static=None, static_grow=7):
     """Return (contour (N,2) float32 | None, mask uint8 0/255, raw colour mask uint8 0/1).
 
-    fabric_bgr: picked fabric colour.  Without it the brighter side of an Otsu split of the
-    lightness is taken as the fabric.  `static` (see build_static_mask) is cut out of the mask first.  The colour mask is opened (cuts thin leaks / threads), closed
+    fabric_bgr: picked fabric colour.  Without it (default) the fabric is found as the warmer class of
+    the frame (auto_fabric_mask), which does not depend on the lighting.  `static` (see build_static_mask) is cut out of the mask first.  The colour mask is opened (cuts thin leaks / threads), closed
     (bridges texture and thin seams) and the largest blob is kept, with its holes filled.
     """
     h, w = bgr.shape[:2]
     lab = bgr_to_lab_image(bgr)
     if fabric_bgr is None:
-        L = np.clip(lab[..., 0] * 2.55, 0, 255).astype(np.uint8)
-        _, raw = cv2.threshold(L, 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        raw = auto_fabric_mask(bgr)
     else:
         raw = color_match_mask(lab, bgr_to_lab(fabric_bgr), tol)
     m = raw

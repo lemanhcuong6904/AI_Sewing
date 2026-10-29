@@ -8,7 +8,9 @@ Run (Windows):
     python cuonglm/view_camera/view_camera.py image.png       # one image
     python cuonglm/view_camera/view_camera.py some_folder     # all images, n / p = next / previous
 
-Keys:  left click = pick the fabric colour | c = forget colour (auto: brighter side) | m = colour mask
+Fabric colour: automatic (the warmer class of the frame, independent of the lamp); left click forces a colour.
+Add --static to ignore the fixed layer learnt by build_static_mask.py.
+Keys:  left click = pick the fabric colour | c = back to automatic | m = colour mask
        SPACE = freeze / unfreeze (camera) | s = save the frame | q / ESC = quit
 Sliders: tolerance of the colour match, opening (leak cut), closing (seam bridge).
 """
@@ -29,6 +31,8 @@ from cuonglm.curve_matcher.edge_detect import sample_color  # noqa: E402
 from segment import fit_static, load_static, occluder_from_static, segment_fabric  # noqa: E402
 
 CAM_INDEX, WIDTH, HEIGHT = 0, 640, 480
+USE_STATIC = "--static" in sys.argv          # use static_mask.png (a bed with a fixed layer of the fabric's colour)
+sys.argv = [a for a in sys.argv if a != "--static"]
 SETTINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 WIN = "view_camera"
 YELLOW, GREEN, RED, WHITE = (0, 210, 242), (77, 164, 20), (27, 27, 224), (255, 255, 255)
@@ -65,7 +69,7 @@ def text(img, s, org, color=(30, 30, 30), scale=0.55):
 class App:
     def __init__(self):
         self.fabric_bgr = None
-        self.static = load_static()                 # fixed layer of the bed (build_static_mask.py)
+        self.static = load_static() if USE_STATIC else None   # fixed layer of the bed (build_static_mask.py)
         self.show_mask = False
         self.frame = None
         self.click = None
@@ -75,8 +79,6 @@ class App:
         try:
             with open(SETTINGS, encoding="utf-8") as f:
                 s = json.load(f)
-            if s.get("fabric_bgr"):
-                self.fabric_bgr = np.array(s["fabric_bgr"], np.float32)
         except (OSError, ValueError, TypeError):
             pass
 
@@ -113,7 +115,7 @@ class App:
         if contour is None:
             return out, "No fabric region. Click on the fabric to pick its colour."
         cv2.polylines(out, [contour.astype(np.int32).reshape(-1, 1, 2)], True, YELLOW, 1, cv2.LINE_AA)
-        corner, why = find_bottom_left_corner(contour, (w, h), m.u1, m.u2, "auto", min_cut_edge_frac=0.04,
+        corner, why = find_bottom_left_corner(contour, (w, h), m.u1, m.u2, "auto", min_cut_edge_frac=0.04, long_h_min_theta=35.0,
                                               occluder=None if static is None else occluder_from_static(static))
         if corner is None:
             return out, why

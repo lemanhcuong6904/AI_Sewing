@@ -113,7 +113,7 @@ def find_bottom_left_corner(contour, image_size, u1, u2, rot_alignment="auto",
                             right_tol_deg=12.0, max_theta_deg=50.0, border_px=3.0,
                             min_edge_frac=0.22, corner_border_px=8.0, log=None, eps_frac=0.012,
                             max_fit_px=4.0, long_h=0.8, fit_tol_px=3.0, arm_fit_frac=0.3, min_cut_edge_frac=0.1,
-                            occluder=None):
+                            occluder=None, long_h_min_theta=0.0):
     """contour: (N,2) closed fabric contour.  image_size = (w, h).
 
     Returns (Corner, None) or (None, reason).
@@ -134,6 +134,10 @@ def find_bottom_left_corner(contour, image_size, u1, u2, rot_alignment="auto",
     returned when no corner with two complete edges exists.  `occluder` (uint8 image-sized mask) marks
     regions that hide the fabric like the image border does (e.g. a fixed layer of the same colour):
     contour edges lying in it are ignored, and an edge ending in it counts as cut.
+
+    The horizontal arm must be at least long_h times the vertical one (landscape fabric), but only when
+    |theta| >= long_h_min_theta (default 0: always).  The alternative reading of a rectangle (the corner
+    turned by 90) is out of reach for small theta, so a portrait piece needs no such rule there.
     """
     c = np.asarray(contour, np.float64)
     w, h = image_size
@@ -296,7 +300,7 @@ def find_bottom_left_corner(contour, image_size, u1, u2, rot_alignment="auto",
         # and it already looks long enough, the corner is fine.  If it is the vertical arm, the true
         # vertical side may be the longer one, which only matters when the two readings of a
         # rectangle compete (|theta| > 35).
-        if h_len < long_h * v_len:
+        if h_len < long_h * v_len and abs(th_auto) >= long_h_min_theta:
             if log is not None:
                 log.append(f"corner ({pt_r[0]:.0f},{pt_r[1]:.0f}): horizontal arm {h_len:.0f}px is the short side")
             return
