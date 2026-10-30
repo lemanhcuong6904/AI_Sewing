@@ -2,7 +2,7 @@
 
 Phím tắt (cửa sổ preview):
     SPACE / s : lưu 1 ảnh
-    a         : bật/tắt tự động lưu (mỗi AUTO_INTERVAL giây)
+    a         : bật/tắt tự động lưu (chỉ lưu khi frame thay đổi so với ảnh đã lưu gần nhất)
     q / ESC   : thoát
 
 Chạy:
@@ -15,13 +15,27 @@ import cv2 as cv
 
 # ============================ CẤU HÌNH ============================
 OUT_DIR = "test_frames/square_01"   # thư mục lưu ảnh
-PREFIX = "frame"                    # tiền tố tên file: frame_0000.png
+PREFIX = ""                    # tiền tố tên file: frame_0000.png
 CAM_INDEX = 0                       # camera index
 WIDTH = 640
 HEIGHT = 480
-AUTO_START = False                  # True: bắt đầu ở chế độ tự động lưu
-AUTO_INTERVAL = 2.0                 # giây giữa 2 lần tự lưu
+AUTO_START = True                  # True: bắt đầu ở chế độ tự động lưu
+PIXEL_DIFF = 25                     # 1 pixel coi là "đổi" nếu chênh độ sáng > giá trị này (0-255)
+CHANGE_FRAC = 0.01                  # lưu khi > 1% số pixel đổi so với ảnh đã lưu gần nhất
+MIN_GAP = 0.5                       # giây tối thiểu giữa 2 lần tự lưu (tránh lưu dồn khi đang di chuyển)
 # ==================================================================
+
+
+def small_gray(frame):
+    g = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    g = cv.resize(g, (160, 120), interpolation=cv.INTER_AREA)
+    return cv.GaussianBlur(g, (5, 5), 0)          # làm mờ để nhiễu cảm biến không tính là thay đổi
+
+
+def changed(ref, cur) -> bool:
+    if ref is None:
+        return True
+    return float((cv.absdiff(ref, cur) > PIXEL_DIFF).mean()) > CHANGE_FRAC
 
 
 def open_camera(index: int, width: int, height: int) -> cv.VideoCapture:
@@ -62,6 +76,7 @@ def main():
     last_save = 0.0
     flash_until = 0.0
     saved = 0
+    ref = None                                      # ảnh (nhỏ, xám) đã lưu gần nhất
 
     try:
         while True:
@@ -71,7 +86,8 @@ def main():
                 break
 
             now = time.time()
-            do_save = auto and now - last_save >= AUTO_INTERVAL
+            cur = small_gray(frame)
+            do_save = auto and now - last_save >= MIN_GAP and changed(ref, cur)
 
             key = cv.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
@@ -80,7 +96,7 @@ def main():
                 do_save = True
             if key == ord("a"):
                 auto = not auto
-                last_save = now
+                ref = None                          # bật auto: lưu ngay frame đầu tiên làm mốc
                 print(f"[collect] Auto {'BẬT' if auto else 'TẮT'}")
 
             if do_save:
@@ -90,6 +106,7 @@ def main():
                 idx += 1
                 saved += 1
                 last_save = now
+                ref = cur
                 flash_until = now + 0.15
 
             view = frame.copy()
