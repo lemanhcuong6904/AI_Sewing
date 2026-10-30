@@ -76,7 +76,10 @@ def main():
                         0.6, (27, 27, 224), 2, cv2.LINE_AA)
             cv2.imshow(WIN, view)
             k = cv2.waitKey(1) & 0xFF
-            if k in (ord("q"), 27) or cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:
+            if k in (ord("q"), 27):
+                break
+            # closed with the X button; on Linux the property is not reliable right after the first imshow
+            if now - t0 > 2 and cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:
                 break
     except KeyboardInterrupt:
         pass
