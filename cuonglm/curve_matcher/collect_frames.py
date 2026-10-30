@@ -13,6 +13,8 @@ from pathlib import Path
 
 import cv2 as cv
 
+from overlay import AxesOverlay
+
 # ============================ CẤU HÌNH ============================
 OUT_DIR = "test_frames/square_01"   # thư mục lưu ảnh
 PREFIX = ""                    # tiền tố tên file: frame_0000.png
@@ -69,6 +71,7 @@ def main():
     cap = open_camera(CAM_INDEX, WIDTH, HEIGHT)
     w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+    axes = AxesOverlay((w, h))
     print(f"[collect] Camera {CAM_INDEX} mở {w}x{h}, lưu vào {out_dir.resolve()}")
     print("[collect] SPACE/s: lưu | a: auto | q/ESC: thoát")
 
@@ -109,7 +112,7 @@ def main():
                 ref = cur
                 flash_until = now + 0.15
 
-            view = frame.copy()
+            view = axes.draw(frame.copy())              # trục B chỉ vẽ lên preview
             status = f"saved: {saved} | auto: {'ON' if auto else 'OFF'}"
             cv.putText(view, status, (10, 25), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             if now < flash_until:

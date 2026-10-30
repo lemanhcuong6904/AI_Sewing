@@ -1,7 +1,7 @@
 """Record the camera to a video file at a low frame rate.
 
 Run (Windows):
-    python cuonglm/view_camera/record_video.py
+    python cuonglm/curve_matcher/record_video.py
 
 Settings are the constants below. One frame is grabbed every 1/FPS seconds and written at that rate,
 so the video plays back in real time.  Stop with q / ESC / Ctrl+C (or after SECONDS).
@@ -11,13 +11,14 @@ import time
 
 import cv2
 
+from overlay import AxesOverlay
+
 # ---- config
 CAM_INDEX = 0
 WIDTH, HEIGHT = 640, 480
 FPS = 5.0                # recording frame rate (low)
 SECONDS = 0              # stop after this many seconds (0 = until quit)
 OUT = None               # output file; None = record_<time>.mp4 next to this script
-PREVIEW = True           # show a window while recording (False: stop with Ctrl+C or SECONDS)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WIN = "record_video"
@@ -46,6 +47,7 @@ def main():
         cap.release()
         raise SystemExit("The camera returned no frame.")
     h, w = frame.shape[:2]
+    axes = AxesOverlay((w, h))
 
     writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (w, h))
     if not writer.isOpened():
@@ -69,16 +71,13 @@ def main():
                 next_t += period
                 if next_t < now:                         # fell behind: do not burst to catch up
                     next_t = now + period
-            if PREVIEW:
-                view = frame.copy()
-                cv2.putText(view, f"REC {n} frames  {now - t0:.0f}s", (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6, (27, 27, 224), 2, cv2.LINE_AA)
-                cv2.imshow(WIN, view)
-                k = cv2.waitKey(1) & 0xFF
-                if k in (ord("q"), 27) or cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:
-                    break
-            else:
-                time.sleep(0.005)
+            view = axes.draw(frame.copy())               # axes only on the preview, not in the video
+            cv2.putText(view, f"REC {n} frames  {now - t0:.0f}s", (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (27, 27, 224), 2, cv2.LINE_AA)
+            cv2.imshow(WIN, view)
+            k = cv2.waitKey(1) & 0xFF
+            if k in (ord("q"), 27) or cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:
+                break
     except KeyboardInterrupt:
         pass
     finally:
